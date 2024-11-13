@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Donate</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Roboto', sans-serif;
+        }
+
+        body {
+            background-color: #f4f6f8;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        h1, h2 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        #registerModal, #donateForm {
+            width: 100%;
+            max-width: 400px;
+            padding: 30px;
+            border-radius: 8px;
+            background-color: #ffffff;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        #registerModal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            opacity: 0;
+        }
+
+        #registerModal.active {
+            display: block;
+            opacity: 1;
+            transform: translate(-50%, -50%);
+        }
+
+        form input[type="text"], form input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            color: #333;
+        }
+
+        form input[type="submit"] {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        form input[type="submit"]:hover {
+            background-color: #0056b3;
+        }
+
+        ul#users {
+            list-style-type: none;
+            margin-top: 15px;
+            padding: 0;
+            width: 100%;
+            max-width: 400px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        ul#users li {
+            padding: 10px 15px;
+            border-bottom: 1px solid #eee;
+            font-size: 16px;
+        }
+
+        ul#users li:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body>
+    <h1 id="welcome-message"></h1>
+
+    <!-- Registration Modal -->
+    <div id="registerModal" class="active">
+        <h2>Register</h2>
+        <form id="registerForm" action="/register" method="POST">
+            Name: <input type="text" id="name" name="name" required>
+            <input type="submit" value="Register">
+        </form>
+    </div>
+
+    <h2>to Donate App</h2>
+    <form id="donateForm" action="/donate" method="POST" style="display: none;">
+        From: <input type="text" id="from" name="from" readonly>
+        To: <input type="text" name="to">
+        Amount: <input type="number" name="amount">
+        <input type="submit" value="Send">
+    </form>
+
+    <h2>Users</h2>
+    <ul id="users"></ul>
+
+
+    <script>
+        // Check if user is already registered
+        const registeredName = sessionStorage.getItem('username');
+        
+        // Elements
+        const registerModal = document.getElementById('registerModal');
+        const donateForm = document.getElementById('donateForm');
+        const fromInput = document.getElementById('from'); 
+
+        if (registeredName) {
+            // If registered, hide registration modal and show donate form
+            registerModal.classList.remove('active');
+            donateForm.style.display = 'block';
+            fromInput.value = registeredName;
+            document.getElementById("welcome-message").innerText = "Welcome, " + registeredName;
+            // Establish WebSocket connection with the username
+            connectWebSocket(registeredName);
+        } else {
+            // Show registration modal
+            registerModal.classList.add('active');
+
+            // Handle registration form submission
+            document.getElementById('registerForm').onsubmit = function(event) {
+                event.preventDefault();
+                const name = document.getElementById('name').value;
+
+                // Send registration data to the server
+                fetch('/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: 'name=' + encodeURIComponent(name)
+                }).then(() => {
+                    // Save username to session storage
+                    sessionStorage.setItem('username', name);
+                    fromInput.value = name;
+
+                    // Hide registration modal and show donate form
+                    registerModal.classList.remove('active');
+                    donateForm.style.display = 'block';
+
+                    // Connect WebSocket with the username
+                    connectWebSocket(name);
+                    document.getElementById("welcome-message").innerText = "Welcome, " + name;
+                });
+            };
+        }
+
+        // WebSocket connection function
+        function connectWebSocket(username) {
+            const ws = new WebSocket(`ws://localhost:8080/ws?name=${username}`);
+
+            ws.onmessage = function(event) {
+                const users = JSON.parse(event.data);
+                const usersList = document.getElementById('users');
+                usersList.innerHTML = ''; 
+                users.forEach(function(user) {
+                    const li = document.createElement('li');
+                    li.textContent = `${user.Name}: $${user.Balance}`;
+                    usersList.appendChild(li);
+                });
+            };
+
+            ws.onclose = function() {
+                console.log("WebSocket connection closed. Reconnecting...");
+                setTimeout(() => connectWebSocket(username), 1000);
+            };
+
+            ws.onerror = function(error) {
+                console.error("WebSocket error:", error);
+                ws.close();
+            };
+        }
+
+    </script>
+</body>
+</html>
